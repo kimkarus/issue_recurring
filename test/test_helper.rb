@@ -1,6 +1,6 @@
 # Load the Redmine helper
-require File.expand_path(File.dirname(__FILE__) + '/../../../test/test_helper')
-require File.expand_path('../test_case', __FILE__)
+require_relative '../../../test/test_helper'
+require_relative 'test_case'
 
 class IssueRecurringIntegrationTestCase < Redmine::IntegrationTest
   fixtures :issues, :issue_statuses,
@@ -66,6 +66,7 @@ class IssueRecurringIntegrationTestCase < Redmine::IntegrationTest
     parent_id = parent && parent.id
     assert_not_equal [parent_id], [child.parent_issue_id]
     put "/issues/#{child.id}", params: {issue: {parent_issue_id: parent_id}}
+    parent.reload if parent
     child.reload
     assert_equal [parent_id], [child.parent_issue_id]
   end
@@ -84,11 +85,7 @@ class IssueRecurringIntegrationTestCase < Redmine::IntegrationTest
   end
 
   def set_custom_field(issue, field, value)
-    if Redmine::VERSION::MAJOR >= 4
-      assert_nil issue.custom_field_value(field)
-    else
-      assert_empty issue.custom_field_value(field)
-    end
+    assert_nil issue.custom_field_value(field)
     put "/issues/#{issue.id}", params: {issue: {custom_field_values: {field.id => value}}}
     issue.reload
     assert_equal value, issue.custom_field_value(field)
@@ -138,14 +135,14 @@ class IssueRecurringIntegrationTestCase < Redmine::IntegrationTest
   end
 
   def update_plugin_settings(**s)
-    assert User.current.admin
+    assert User.find(session[:user_id]).admin
     settings = Setting.plugin_issue_recurring.merge(s)
     post plugin_settings_path(id: 'issue_recurring'), params: {settings: settings}
     assert_redirected_to plugin_settings_path(id: 'issue_recurring')
   end
 
   def copy_project(project)
-    assert User.current.admin
+    assert User.find(session[:user_id]).admin
     assert_difference 'Project.count', 1 do
       post copy_project_path(project), params: {
         project: {
@@ -201,7 +198,7 @@ class IssueRecurringIntegrationTestCase < Redmine::IntegrationTest
   def destroy_user(user)
     assert_not user.reload.destroyed?
     assert_difference 'User.count', -1 do
-      delete user_path(user)
+      delete user_path(user), params: {confirm: user.login}
     end
     assert_raises(ActiveRecord::RecordNotFound) { user.reload }
   end
